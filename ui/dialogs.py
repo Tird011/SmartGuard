@@ -2,6 +2,7 @@
 'Scan With the camera' view (Tier 2)."""
 import os
 
+import cv2
 from PyQt5.QtCore import QSize, Qt, QTimer
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (QDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
@@ -14,6 +15,8 @@ from ui.styles import SCAN_QSS
 from ui.workers import OcrWorker
 
 _running_ocr = set()    # keeps a still-running OCR thread alive after its dialog closed
+# Cards sit sideways in some holders (the temporary ID), so each attempt reads a different turn.
+_TURNS = (None, cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
 
 def button(text: str, name: str = "", slot=None) -> QPushButton:
@@ -113,6 +116,7 @@ class ScanDialog(QDialog):
         self.worker, self.ocr = worker, ocr
         self.outcome, self.result, self.partial = "cancel", None, OcrResult()
         self._thread = None
+        self._attempt = 0
 
         self.view = QLabel()
         self.view.setObjectName("video")
@@ -151,7 +155,11 @@ class ScanDialog(QDialog):
             self.status.setText("Waiting for the camera...")
             return
         self.status.setText("Reading document...")
-        t = self._thread = OcrWorker(self.ocr, raw.copy())
+        image, turn = raw.copy(), _TURNS[self._attempt % len(_TURNS)]
+        self._attempt += 1
+        if turn is not None:
+            image = cv2.rotate(image, turn)
+        t = self._thread = OcrWorker(self.ocr, image)
         _running_ocr.add(t)             # must outlive its own run(), even if this dialog closes first
         t.finished.connect(lambda t=t: _running_ocr.discard(t))
         t.done.connect(self._on_result)

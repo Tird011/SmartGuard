@@ -1,4 +1,4 @@
-# SmartGuard-Vision v1 (Prototype)
+# SmartGuard-Vision v1.1
 
 Local-first campus checkpoint monitor: camera + YOLOv8 check uniform / ID lanyard, an ESP32 opens
 the gate, flagged students go to a review queue, and every case ends up in a local SQLite audit log.
@@ -39,7 +39,7 @@ audit table (ui/audit_page.py) -> Save A Copy -> PDF / Excel (core/report.py)
 
 ## Settings you will want to change (`core/config.py`)
 
-- `STUDENT_NUMBER_PATTERN`: your school's student number format (used by the OCR).
+- `STUDENT_NUMBER_PATTERN`: the student number format (already set to the school IDs: 5-2-4 digits).
 - `SERIAL_PORT` (or env `SG_SERIAL_PORT`), `CAMERA_INDEX`, `WASH_DAY_WEEKDAY`, `CONFIDENCE_THRESHOLD`.
 - `SG_HARDWARE=0` runs without the ESP32.
 
