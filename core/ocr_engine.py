@@ -25,6 +25,7 @@ _COMMA_NAME = re.compile(r"^([A-Za-z][A-Za-z.'\- ]{1,40}),\s*([A-Za-z][A-Za-z.'\
 _NOT_A_NAME = re.compile(r"\b(CITY|BATANGAS|LIPA|KOLEHIYO|LUNSOD|LUNGSOD|COLLEGE|STUDIES|SEMESTER|"
                          r"UNIVERSITY|REPUBLIC|PHILIPPINES|SCHOOL|SIGNATURE|STUDENT|TEMPORARY)\b", re.I)
 _INITIALS = re.compile(r"(\s+[A-Za-z]\.?)+$")      # trailing middle initial(s)
+_SUFFIX = re.compile(r"[\s,]+(JR|SR|II|III|IV)\.?$", re.I)
 _MAX_OCR_WIDTH = 1280
 
 
@@ -71,7 +72,8 @@ def _comma_name(lines: List[str], number_line: Optional[int]) -> Tuple[str, str]
             best = (distance, m.group(1), m.group(2))
     if best is None:
         return "", ""
-    last, given = best[1].strip(" ."), best[2].strip()
+    last = _SUFFIX.sub("", best[1].strip(" ."))
+    given = _SUFFIX.sub("", best[2].strip())
     first = _INITIALS.sub("", given).strip(" .") or given.strip(" .")
     return first, last
 
