@@ -45,3 +45,10 @@ def test_low_confidence_goes_to_queue():
 def test_empty_or_weak_frames_do_nothing():
     assert p.evaluate_compliance([], MON).action == p.ACTION_NONE
     assert p.evaluate_compliance(dets(uniform=0.2, id_lanyard=0.2), MON).action == p.ACTION_NONE
+
+def test_person_alone_is_flagged_but_never_lowers_confidence():
+    ev = p.evaluate_compliance(dets(person=0.9), MON)                    # body, no attire, no lanyard
+    assert ev.action == p.ACTION_FLAG_QUEUE and {p.V_NO_ATTIRE, p.V_NO_LANYARD} <= set(ev.violations)
+    ok = p.evaluate_compliance(dets(person=0.4, uniform=0.95, id_lanyard=0.9), MON)
+    assert ok.compliant and ok.confidence == 0.9                         # weak "person" doesn't block a pass
+    assert p.evaluate_compliance(dets(person=0.2), MON).action == p.ACTION_NONE   # too faint = nobody there

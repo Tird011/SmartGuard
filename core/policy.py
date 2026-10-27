@@ -25,8 +25,9 @@ from core import config
 UNIFORM = "uniform"
 CIVILIAN = "civilian_wear"
 LANYARD = "id_lanyard"
+PERSON = "person"       # presence only: a body with no attire/lanyard is flagged instead of ignored via jacket or uni
 
-_missing = {UNIFORM, CIVILIAN, LANYARD} - set(config.CLASS_NAMES)
+_missing = {UNIFORM, CIVILIAN, LANYARD, PERSON} - set(config.CLASS_NAMES)
 if _missing:
     raise RuntimeError(f"config.CLASS_NAMES is missing classes the policy engine needs: {sorted(_missing)}")
 
