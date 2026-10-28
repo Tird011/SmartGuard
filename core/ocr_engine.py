@@ -26,6 +26,7 @@ _NOT_A_NAME = re.compile(r"\b(CITY|BATANGAS|LIPA|KOLEHIYO|LUNSOD|LUNGSOD|COLLEGE
                          r"UNIVERSITY|REPUBLIC|PHILIPPINES|SCHOOL|SIGNATURE|STUDENT|TEMPORARY)\b", re.I)
 _INITIALS = re.compile(r"(\s+[A-Za-z]\.?)+$")      # trailing middle initial(s)
 _SUFFIX = re.compile(r"[\s,]+(JR|SR|II|III|IV)\.?$", re.I)
+_SUFFIX_MIDDLE = re.compile(r"\s+(JR|SR|II|III|IV)\.?(\s+.*)?$", re.I)   # COR order: GIVEN SUFFIX MIDDLE
 _MAX_OCR_WIDTH = 1280
 
 
@@ -35,11 +36,12 @@ class OcrResult:
     first_name: str = ""
     last_name: str = ""
     raw_text: str = ""
+    review: bool = False        # name read, but the middle name may be glued to the first name
 
     @property
     def success(self) -> bool:
         """Complete enough to log without a human re-typing anything."""
-        return bool(self.student_number and self.first_name and self.last_name)
+        return bool(self.student_number and self.first_name and self.last_name) and not self.review
 
 
 def _clean(text: str) -> str:
@@ -96,8 +98,15 @@ def parse_document_text(text: str) -> OcrResult:
         first, last = _comma_name(lines, number_line)
     if not (last and first):
         full = _value_after(lines, _FULL)
-        if "," in full:                                  # "DELA CRUZ, JUAN A."
-            last, first = [p.strip() for p in full.split(",", 1)]
+        if "," in full:                      # COR: "DELA CRUZ, JUAN A." or "DELA CRUZ, JUAN III SANTOS"
+            last, given = [p.strip() for p in full.split(",", 1)]
+            cut = _SUFFIX_MIDDLE.search(given)
+            if cut:                                      # the suffix marks where the middle name starts
+                first = given[:cut.start()]
+            else:
+                first = _INITIALS.sub("", given) or given
+                # full middle name and no suffix: it cannot be told apart from a second given name
+                result.review = first == given and len(given.split()) > 1
         elif full:                                       # "Juan Dela Cruz"
             parts = full.split()
             first, last = " ".join(parts[:-1]), parts[-1]

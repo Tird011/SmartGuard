@@ -173,6 +173,8 @@ class ScanDialog(QDialog):
         if res.success:
             self.result, self.outcome = res, "ok"
             self.accept()
+        elif res.review:
+            self.status.setText("Name needs a check (middle name). Press Manual Entry to confirm it.")
         else:
             self.status.setText("Could not read it all. Hold the document steady, or use Manual Entry.")
 
