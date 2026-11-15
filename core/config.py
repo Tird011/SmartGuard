@@ -17,8 +17,8 @@ for _d in (MODELS_DIR, SNAPSHOTS_DIR, REPORTS_DIR):
 
 # --- AI & Computer Vision Settings ---
 YOLO_MODEL_PATH = os.getenv("SG_MODEL_PATH", os.path.join(MODELS_DIR, "smartguard_yolov8.pt"))
-YOLO_IMGSZ = 640
-CONFIDENCE_THRESHOLD = 0.85        # Tier 1 auto-pass: every relevant detection must reach this
+YOLO_IMGSZ = 960              # was 640; the model was trained at 1280, and 640 loses the small lanyards
+CONFIDENCE_THRESHOLD = 0.5    # was 0.85; this model's confidences sit around 0.3-0.8
 MIN_DETECTION_CONFIDENCE = 0.35    # detections below this are ignored entirely
 CLASS_NAMES = ["uniform", "civilian_wear", "id_lanyard", "person"]   # "person" added
 INFERENCE_EVERY_N_FRAMES = 3       # run YOLO every Nth frame (keeps CPU-only laptops smooth)

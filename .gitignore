@@ -16,9 +16,11 @@ dist/
 *.sqlite3
 logs/
 snapshots/
+.smartguard.db
 
 # IDE specific
 .vscode/
 .idea/
 *.swp
 *.swo
+*.pt 
