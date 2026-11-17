@@ -33,6 +33,7 @@ class VideoWorker(QThread):
         super().__init__()
         self.engine = engine
         self.latest_raw = None      # newest un-annotated frame (the scan dialog reads this)
+        self.paused = False         # True while an ID/COR is scanned: no detection, no flags
         self._running = True
 
     def _open(self):
@@ -64,11 +65,12 @@ class VideoWorker(QThread):
                 if not ok:
                     break
                 self.latest_raw = raw
-                try:
-                    result = self.engine.process(raw)
-                except Exception:
-                    log.exception("Engine error")
-                    result = None
+                result = None
+                if not self.paused:
+                    try:
+                        result = self.engine.process(raw)
+                    except Exception:
+                        log.exception("Engine error")
                 now = time.monotonic()
                 if now - last_emit >= _MIN_EMIT_GAP:
                     self.frame.emit(to_qimage(result.annotated if result else raw))

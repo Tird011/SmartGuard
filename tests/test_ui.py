@@ -173,3 +173,17 @@ def test_audit_edit_and_add(app, window, monkeypatch):
     assert db.get_record(rid)["last_name"] == "Santos"
     page._add()
     assert len([r for r in db.fetch_table_rows() if r[1] == "Santos"]) == 2
+
+
+def test_scanning_pauses_detection_and_blurs_the_main_feed(app, window):
+    from PyQt5.QtGui import QImage
+    from ui.main_window import scanning_overlay
+    window._set_scanning(True)
+    assert window.worker.paused and window.scanning
+    img = QImage(320, 240, QImage.Format_RGB888)
+    img.fill(0x808080)
+    out = scanning_overlay(img)
+    assert (out.width(), out.height()) == (320, 240)
+    window._set_scanning(False)
+    assert not window.worker.paused and not window.scanning
+    assert window.engine._locked                   # the student in view is not flagged again at once

@@ -53,6 +53,12 @@ class CheckpointEngine:
         self._frames += 1
         return FrameResult(draw_boxes(frame, self._dets, self._eval), self._eval, event, record_id)
 
+    def hold(self) -> None:
+        """Resume after a pause (ID/COR scan) without flagging whoever is still in view at once:
+        the next event needs a fresh stable verdict and waits for the cooldown or an empty frame."""
+        self._key, self._streak = None, 0
+        self._locked, self._last_fire = True, self._clock()
+
     def _infer(self, frame) -> None:
         try:
             self._dets = self.detector.detect(frame)

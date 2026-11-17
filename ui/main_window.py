@@ -3,7 +3,7 @@ import logging
 import os
 
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QColor, QFont, QImage, QPainter, QPixmap
 from PyQt5.QtWidgets import (QDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
                              QScrollArea, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget)
 
@@ -19,6 +19,23 @@ from ui.dialogs import ManualInputDialog, ScanDialog, VerifyDialog, button
 from ui.workers import VideoWorker
 
 log = logging.getLogger(__name__)
+
+
+def scanning_overlay(image: QImage, text: str = "Scanning...") -> QImage:
+    """Blurred, darkened copy of a camera frame with a centred message."""
+    w, h = image.width(), image.height()
+    small = image.scaled(max(1, w // 24), max(1, h // 24), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+    out = small.scaled(w, h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation).convertToFormat(QImage.Format_RGB888)
+    p = QPainter(out)
+    p.fillRect(out.rect(), QColor(0, 0, 0, 110))
+    font = QFont()
+    font.setBold(True)
+    font.setPixelSize(max(18, h // 10))
+    p.setFont(font)
+    p.setPen(Qt.white)
+    p.drawText(out.rect(), Qt.AlignCenter, text)
+    p.end()
+    return out
 
 
 class QueueCard(QFrame):
@@ -68,6 +85,7 @@ class MainWindow(QMainWindow):
         self.engine = CheckpointEngine(self.detector, self.hw)
         self.verifier = Verifier(self.hw)
         self.ocr = DocumentOCR()
+        self.scanning = False       # main feed blurred + detection paused while an ID/COR is scanned
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -156,6 +174,8 @@ class MainWindow(QMainWindow):
         self._flash(message)
 
     def _show_frame(self, image):
+        if self.scanning:
+            image = scanning_overlay(image)
         self.video.setPixmap(QPixmap.fromImage(image).scaled(
             self.video.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
@@ -210,9 +230,22 @@ class MainWindow(QMainWindow):
         else:
             self._manual(record_id)
 
+    def _set_scanning(self, on: bool):
+        """Pause detection (no new flags or snapshots) and blur the main feed during a scan."""
+        self.scanning = on
+        self.worker.paused = on
+        if on:
+            self.video.setText("Scanning...")
+        else:
+            self.engine.hold()          # don't re-flag the student who is still standing there
+
     def _scan(self, record_id: int):
         dlg = ScanDialog(self.worker, self.ocr, self)
-        dlg.exec_()
+        self._set_scanning(True)
+        try:
+            dlg.exec_()
+        finally:
+            self._set_scanning(False)
         if dlg.outcome == "ok":
             self._flash(self.verifier.scan(record_id, dlg.result).message)
             self.refresh_queue()
