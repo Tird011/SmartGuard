@@ -32,7 +32,7 @@ FRAME_WIDTH = 1920
 FRAME_HEIGHT = 1080
 
 # --- Hardware (ESP32) Settings ---
-SERIAL_PORT = os.getenv("SG_SERIAL_PORT", "COM3")
+SERIAL_PORT = os.getenv("SG_SERIAL_PORT", "AUTO")   # "AUTO" finds the ESP32 by itself; or e.g. "COM5"
 BAUD_RATE = 115200
 SERIAL_TIMEOUT = 1                 # seconds
 ENABLE_HARDWARE = os.getenv("SG_HARDWARE", "1") == "1"

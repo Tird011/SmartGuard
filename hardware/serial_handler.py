@@ -14,11 +14,15 @@ Design goals
     firmware answers PING with PONG (or announces READY).
   * Fail safe: the firmware closes the gate if the heartbeat stops, and this
     handler sends SAFE on shutdown.
+  * Find the board by itself: with SERIAL_PORT = "AUTO" (the default) every
+    USB serial port is tried, USB-to-serial chips used on ESP32 boards first,
+    and the one whose firmware answers the handshake is used.
 
 Protocol (ASCII, one command per line, replies are one line each)
   host -> ESP32:  PING | PASS | WARN | GATE_OPEN | GATE_CLOSE | BUZZ |
-                  LED_GREEN | LED_RED | LED_OFF | SAFE | STATUS
-  ESP32 -> host:  READY | PONG | OK <CMD> | ERR <reason> | STATUS ... | EVT ...
+                  LED_GREEN | LED_RED | LED_OFF | SAFE | STATUS | TEST
+  ESP32 -> host:  READY SMARTGUARD fw=<v> reset=<why> | PONG | OK <CMD> |
+                  ERR <reason> | STATUS ... | EVT HOST_LOST | EVT TEST_DONE
 
 UI note: status listeners are called from the handler thread. In PyQt, have the
 listener emit a pyqtSignal instead of touching widgets directly.
@@ -31,8 +35,9 @@ from typing import Callable, List, Optional
 
 try:
     import serial  # pyserial
+    from serial.tools import list_ports
 except ImportError:  # app still runs, hardware just stays disabled
-    serial = None
+    serial = list_ports = None
 
 from core import config, policy
 
@@ -49,6 +54,20 @@ _HEARTBEAT_SEC = getattr(config, "SERIAL_HEARTBEAT_SEC", 2.0)   # PING interval
 _HANDSHAKE_SEC = getattr(config, "SERIAL_HANDSHAKE_SEC", 4.0)   # max wait for the firmware to answer
 _STALE_CMD_SEC = 2.0                                            # drop queued commands older than this
 _MAX_RX_BUFFER = 256
+
+AUTO_PORT = "AUTO"
+# USB vendor ids of the USB-to-serial chips found on ESP32 dev boards (tried first in AUTO mode):
+# Silicon Labs CP210x, WCH CH340/CH9102, FTDI, Espressif native USB.
+_ESP32_USB_VIDS = (0x10C4, 0x1A86, 0x0403, 0x303A)
+
+
+def find_candidate_ports() -> List[str]:
+    """USB serial ports, likely ESP32 boards first. Bluetooth/virtual ports are skipped."""
+    if list_ports is None:
+        return []
+    ports = [p for p in list_ports.comports() if p.vid is not None]
+    ports.sort(key=lambda p: (p.vid not in _ESP32_USB_VIDS, p.device))
+    return [p.device for p in ports]
 
 
 class SerialHandler:
@@ -71,6 +90,8 @@ class SerialHandler:
         self._last_rx = 0.0
         self._warned = False
         self.last_status_line = ""
+        self.firmware_info = ""        # the READY line, e.g. "READY SMARTGUARD fw=1.1.0 reset=POWERON"
+        self.connected_port = ""       # the port actually in use (useful in AUTO mode)
 
     # ------------------------------------------------------------ public state
     @property
@@ -172,6 +193,10 @@ class SerialHandler:
         """Ask the ESP32 to report its state; the reply lands in last_status_line."""
         return self.send_command("STATUS")
 
+    def run_self_test(self) -> bool:
+        """Bench check: green LED, red LED, beep, gate open, gate close (about 5 s)."""
+        return self.send_command("TEST")
+
     # ----------------------------------------------------------- worker thread
     def _run(self) -> None:
         rx = bytearray()
@@ -197,10 +222,10 @@ class SerialHandler:
                 logger.warning("Serial link lost (%s). Will try to reconnect.", exc)
                 self._drop_connection()
 
-    def _create_port(self):
+    def _create_port(self, port: str):
         """Build an unopened port object (separate method so tests can fake it)."""
         conn = serial.Serial()
-        conn.port = self.port
+        conn.port = port
         conn.baudrate = self.baud
         conn.timeout = config.SERIAL_TIMEOUT
         conn.write_timeout = 1.0
@@ -208,26 +233,43 @@ class SerialHandler:
         conn.rts = False
         return conn
 
+    def _candidates(self) -> List[str]:
+        if self.port.upper() != AUTO_PORT:
+            return [self.port]
+        found = find_candidate_ports()
+        if self.connected_port in found:          # the port that worked last time goes first
+            found.remove(self.connected_port)
+            found.insert(0, self.connected_port)
+        return found
+
     def _connect(self) -> bool:
-        conn = None
-        try:
-            conn = self._create_port()
-            conn.open()
-            if not self._handshake(conn):
-                raise IOError(f"no answer from ESP32 on {self.port}")
-        except Exception as exc:
-            if conn is not None:
-                self._close_port(conn)
-            if not self._warned:  # log once, not every retry
-                logger.warning("ESP32 not available on %s (%s). Software-only mode; "
-                               "retrying every %.0fs.", self.port, exc, _RECONNECT_SEC)
-                self._warned = True
-            return False
-        self._warned = False
-        self._conn = conn
-        self._set_state(STATE_CONNECTED)
-        logger.info("Connected to ESP32 on %s at %d baud.", self.port, self.baud)
-        return True
+        candidates = self._candidates()
+        errors = []
+        for port in candidates:
+            if self._stop.is_set():
+                return False
+            conn = None
+            try:
+                conn = self._create_port(port)
+                conn.open()
+                if not self._handshake(conn):
+                    raise IOError("no answer from the SmartGuard firmware")
+            except Exception as exc:
+                if conn is not None:
+                    self._close_port(conn)
+                errors.append(f"{port}: {exc}")
+                continue
+            self._warned = False
+            self._conn, self.connected_port = conn, port
+            self._set_state(STATE_CONNECTED)
+            logger.info("Connected to ESP32 on %s at %d baud. %s", port, self.baud, self.firmware_info)
+            return True
+        if not self._warned:  # log once, not every retry
+            detail = "; ".join(errors) if errors else "no USB serial port found (cable, driver, or charge-only cable?)"
+            logger.warning("ESP32 not available (%s). Software-only mode; retrying every %.0fs.",
+                           detail, _RECONNECT_SEC)
+            self._warned = True
+        return False
 
     def _handshake(self, conn) -> bool:
         """Confirm the firmware is on the other end (PONG or READY)."""
@@ -242,6 +284,9 @@ class SerialHandler:
             n = conn.in_waiting
             if n:
                 buf.extend(conn.read(n))
+                for raw in bytes(buf).split(b"\n"):
+                    if raw.startswith(b"READY"):
+                        self.firmware_info = raw.decode("ascii", "ignore").strip()
                 if b"PONG" in buf or b"READY" in buf:
                     return True
             time.sleep(0.05)
@@ -293,6 +338,12 @@ class SerialHandler:
         elif line.startswith("STATUS"):
             self.last_status_line = line
             logger.info("ESP32 %s", line)
+        elif line.startswith("READY"):              # the board rebooted while connected
+            self.firmware_info = line
+            level = logging.INFO if "reset=POWERON" in line or "reset=EXTERNAL" in line else logging.WARNING
+            logger.log(level, "ESP32 restarted: %s", line)
+        elif line.startswith("EVT"):
+            logger.log(logging.WARNING if "HOST_LOST" in line else logging.INFO, "ESP32 %s", line)
         else:
             logger.debug("ESP32: %s", line)
 

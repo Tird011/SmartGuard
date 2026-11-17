@@ -1,5 +1,6 @@
 from datetime import date
 
+from core import config
 from core import policy as p
 
 MON, WED = date(2026, 10, 19), date(2026, 10, 21)
@@ -38,7 +39,8 @@ def test_all_violations_reported_together():
 
 
 def test_low_confidence_goes_to_queue():
-    ev = p.evaluate_compliance(dets(uniform=0.6, id_lanyard=0.9), MON)
+    weak = (config.MIN_DETECTION_CONFIDENCE + config.CONFIDENCE_THRESHOLD) / 2   # seen, but below the auto-pass bar
+    ev = p.evaluate_compliance(dets(uniform=weak, id_lanyard=0.95), MON)
     assert ev.status == p.STATUS_LOW_CONFIDENCE and ev.action == p.ACTION_FLAG_QUEUE
 
 

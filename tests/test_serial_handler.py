@@ -68,7 +68,7 @@ def rig(monkeypatch):
     def make():
         h = sh.SerialHandler(port="COMX", enabled=True)
 
-        def create():
+        def create(port):
             ports.append(FakePort(fw))
             return ports[-1]
         h._create_port = create
@@ -151,3 +151,32 @@ def test_disabled_mode_is_inert():
     h = sh.SerialHandler(enabled=False)
     h.start()
     assert h.state == "disabled" and h.grant_access() is False and h._thread is None
+
+
+def test_auto_mode_skips_a_wrong_device_and_finds_the_esp32(rig, monkeypatch):
+    fw, _, _ = rig
+    other = Firmware()
+    other.silent = True                                       # e.g. another USB serial gadget
+    monkeypatch.setattr(sh, "find_candidate_ports", lambda: ["COM4", "COM7"])
+    tried = []
+    h = sh.SerialHandler(port="AUTO", enabled=True)
+
+    def create(port):
+        tried.append(port)
+        return FakePort(other if port == "COM4" else fw)
+    h._create_port = create
+    try:
+        h.start()
+        assert wait(lambda: h.is_connected)
+        assert h.connected_port == "COM7" and tried[:2] == ["COM4", "COM7"]
+    finally:
+        h.close()
+
+
+def test_candidate_ports_put_esp32_usb_chips_first(monkeypatch):
+    class P:
+        def __init__(self, device, vid):
+            self.device, self.vid = device, vid
+    fake = [P("COM1", None), P("COM9", 0x2341), P("COM5", 0x10C4), P("COM3", 0x1A86)]
+    monkeypatch.setattr(sh.list_ports, "comports", lambda: fake)
+    assert sh.find_candidate_ports() == ["COM3", "COM5", "COM9"]   # no-USB COM1 (Bluetooth etc.) skipped
