@@ -45,5 +45,7 @@ WASH_DAY_WEEKDAY = 2               # datetime.weekday(): Mon=0 ... Wed=2
 # Separators may be read by OCR as a space, dot, underscore or long dash, so those are accepted too.
 STUDENT_NUMBER_PATTERN = r"\b\d{5}[-–—_. ]\d{2}[-–—_. ]\d{4}\b"
 OCR_GPU = False
+# One frame read at least this confidently counts as two agreeing frames (see ScanVoter).
+OCR_ACCEPT_CONFIDENCE = 0.6
 SCAN_INTERVAL_MS = 1500            # how often the scan dialog tries to read the document
 OPEN_GATE_ON_VERIFY = True         # a guard-cleared / document-verified student opens the gate

@@ -2,21 +2,19 @@
 'Scan With the camera' view (Tier 2)."""
 import os
 
-import cv2
 from PyQt5.QtCore import QSize, Qt, QTimer
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (QDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
                              QSizePolicy, QVBoxLayout)
 
 from core import config
-from core.ocr_engine import OcrResult
+from core.ocr_engine import OcrResult, ScanVoter
 from core.verification import validate
 from ui.styles import SCAN_QSS
 from ui.workers import OcrWorker
 
 _running_ocr = set()    # keeps a still-running OCR thread alive after its dialog closed
-# Cards sit sideways in some holders (the temporary ID), so each attempt reads a different turn.
-_TURNS = (None, cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE)
+# Orientation (sideways / upside-down cards) is handled inside DocumentOCR.read().
 
 
 def button(text: str, name: str = "", slot=None) -> QPushButton:
@@ -116,7 +114,7 @@ class ScanDialog(QDialog):
         self.worker, self.ocr = worker, ocr
         self.outcome, self.result, self.partial = "cancel", None, OcrResult()
         self._thread = None
-        self._attempt = 0
+        self.voter = ScanVoter()
 
         self.view = QLabel()
         self.view.setObjectName("video")
@@ -154,12 +152,9 @@ class ScanDialog(QDialog):
         if raw is None:
             self.status.setText("Waiting for the camera...")
             return
-        self.status.setText("Reading document...")
-        image, turn = raw.copy(), _TURNS[self._attempt % len(_TURNS)]
-        self._attempt += 1
-        if turn is not None:
-            image = cv2.rotate(image, turn)
-        t = self._thread = OcrWorker(self.ocr, image)
+        if self.voter.frames == 0:
+            self.status.setText("Reading document... (the first scan also loads the reader)")
+        t = self._thread = OcrWorker(self.ocr, raw.copy())
         _running_ocr.add(t)             # must outlive its own run(), even if this dialog closes first
         t.finished.connect(lambda t=t: _running_ocr.discard(t))
         t.done.connect(self._on_result)
@@ -167,16 +162,22 @@ class ScanDialog(QDialog):
 
     def _on_result(self, res: OcrResult):
         self._thread = None
-        for field in ("student_number", "first_name", "last_name"):
-            if getattr(res, field) and not getattr(self.partial, field):
-                setattr(self.partial, field, getattr(res, field))
-        if res.success:
-            self.result, self.outcome = res, "ok"
+        confirmed = self.voter.add(res)
+        self.partial = self.voter.best                  # pre-fills Manual Entry with the best reads
+        if confirmed is not None:
+            self.result, self.outcome = confirmed, "ok"
             self.accept()
-        elif res.review:
-            self.status.setText("Name needs a check (middle name). Press Manual Entry to confirm it.")
+            return
+        seen = self.partial
+        name = f"{seen.last_name}, {seen.first_name}" if seen.last_name else ""
+        if seen.student_number or name:
+            got = "  ·  ".join(x for x in (seen.student_number, name) if x)
+            if seen.review:
+                self.status.setText(f"Read: {got}\nName needs a check (middle name). Press Manual Entry to confirm it.")
+            else:
+                self.status.setText(f"Read: {got}\nConfirming... keep the document still.")
         else:
-            self.status.setText("Could not read it all. Hold the document steady, or use Manual Entry.")
+            self.status.setText("Nothing readable yet. Fill the frame with the document, avoid glare, hold it still.")
 
     def _manual(self):
         self.outcome = "manual"
