@@ -61,7 +61,7 @@ constexpr uint8_t PIN_LED_RED   = 33;
 constexpr uint8_t PIN_STATUS    = 2;     // on-board LED on most DevKits: lit while the app is connected
 
 // Active buzzer (beeps on its own when powered) = false. Passive buzzer (only clicks) = true.
-constexpr bool     BUZZER_PASSIVE  = false;
+constexpr bool     BUZZER_PASSIVE  = false; //true if passive
 constexpr uint32_t PASSIVE_TONE_HZ = 2700;
 
 constexpr int SERVO_CLOSED_DEG = 0;
