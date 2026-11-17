@@ -63,4 +63,5 @@ def test_pdf_and_excel_export(tmp_path, path):
 
     from openpyxl import load_workbook
     rows = list(load_workbook(report.export(str(tmp_path / "c.xlsx"), db_path=path)).active.values)
-    assert rows[0][0] == "Last Name" and len(rows) == 3
+    assert rows[0][0] == "Last Name" and len(rows) == 2          # the Pending record is not saved
+    assert all(r[6] != "Pending" for r in rows[1:])

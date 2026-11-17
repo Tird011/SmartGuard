@@ -142,10 +142,20 @@ class StubOcr:
 
 
 def test_scan_dialog_accepts_complete_read_and_falls_back_on_partial(app):
-    good = ScanDialog(StubWorker(), StubOcr(OcrResult("2023-01234", "Juan", "Dela Cruz")))
+    # one confident read is enough
+    good = ScanDialog(StubWorker(), StubOcr(OcrResult("2023-01234", "Juan", "Dela Cruz", confidence=0.9)))
     good._tick()
     QTest.qWait(300)
     assert good.outcome == "ok" and good.result.last_name == "Dela Cruz"
+
+    # a less confident read must be seen in two frames before it is accepted
+    unsure = ScanDialog(StubWorker(), StubOcr(OcrResult("2023-01234", "Juan", "Dela Cruz", confidence=0.3)))
+    unsure._tick()
+    QTest.qWait(300)
+    assert unsure.outcome == "cancel"
+    unsure._tick()
+    QTest.qWait(300)
+    assert unsure.outcome == "ok" and unsure.result.first_name == "Juan"
 
     partial = ScanDialog(StubWorker(), StubOcr(OcrResult("2023-01234", "", "")))
     partial._tick()

@@ -9,9 +9,10 @@ separate columns, so everything maps 1:1 onto the audit table and the PDF sheet:
 
 A new connection is opened per call, so it is safe from the UI and video threads.
 """
+import os
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Iterator, List, Optional, Tuple
 
 from core import config
@@ -179,6 +180,38 @@ def update_student(student_id: str, first_name: str, last_name: str,
         return cur.rowcount > 0
 
 
+def purge_expired_pending(max_age_hours: Optional[float] = None, now: Optional[datetime] = None,
+                          db_path: Optional[str] = None) -> int:
+    """Delete Pending records older than `max_age_hours` (default config.PENDING_EXPIRY_HOURS).
+
+    Their snapshot photos are deleted too (they are only kept for verification).
+    Verified records are never touched. Returns how many records were removed.
+    """
+    hours = config.PENDING_EXPIRY_HOURS if max_age_hours is None else max_age_hours
+    cutoff = ((now or datetime.now()) - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, snapshot_path FROM records WHERE verification_status=? "
+            "AND (log_date || ' ' || log_time) < ?", (STATUS_PENDING, cutoff)).fetchall()
+        conn.executemany("DELETE FROM records WHERE id=?", [(r["id"],) for r in rows])
+    for r in rows:
+        _remove_snapshot(r["snapshot_path"])
+    return len(rows)
+
+
+def _remove_snapshot(path: str) -> None:
+    """Delete a snapshot file, but only inside the snapshots folder."""
+    if not path:
+        return
+    try:
+        folder = os.path.abspath(config.SNAPSHOTS_DIR)
+        full = os.path.abspath(path)
+        if os.path.commonpath([folder, full]) == folder and os.path.isfile(full):
+            os.remove(full)
+    except (OSError, ValueError):
+        pass
+
+
 def delete_record(record_id: int, db_path: Optional[str] = None) -> bool:
     with _connect(db_path) as conn:
         return conn.execute("DELETE FROM records WHERE id=?", (record_id,)).rowcount > 0
@@ -205,8 +238,12 @@ def fetch_pending(db_path: Optional[str] = None) -> List[Dict]:
         return [dict(r) for r in rows]
 
 
-def _filters(search: str, date_from: str, date_to: str) -> Tuple[str, list]:
+def _filters(search: str, date_from: str, date_to: str,
+             include_pending: bool = True) -> Tuple[str, list]:
     sql, args = "", []
+    if not include_pending:
+        sql += " AND r.verification_status != ?"
+        args.append(STATUS_PENDING)
     if date_from:
         sql += " AND r.log_date >= ?"
         args.append(date_from)
@@ -238,17 +275,17 @@ def fetch_table_rows(search: str = "", date_from: str = "", date_to: str = "",
 
 
 def fetch_report_rows(search: str = "", date_from: str = "", date_to: str = "",
-                      db_path: Optional[str] = None) -> List[Dict]:
+                      db_path: Optional[str] = None, include_pending: bool = True) -> List[Dict]:
     """Full rows for the PDF record sheet (adds violation + method). Newest first."""
-    where, args = _filters(search, date_from, date_to)
+    where, args = _filters(search, date_from, date_to, include_pending)
     with _connect(db_path) as conn:
         return [dict(r) for r in conn.execute(_VIEW_SELECT + where + _ORDER, args).fetchall()]
 
 
 def fetch_summary(date_from: str = "", date_to: str = "",
-                  db_path: Optional[str] = None) -> Dict:
+                  db_path: Optional[str] = None, include_pending: bool = True) -> Dict:
     """Counts for the PDF header: total, by status, by violation type."""
-    where, args = _filters("", date_from, date_to)
+    where, args = _filters("", date_from, date_to, include_pending)
     base = "FROM records r LEFT JOIN students s ON s.student_id = r.student_id WHERE 1=1" + where
     with _connect(db_path) as conn:
         total = conn.execute("SELECT COUNT(*) " + base, args).fetchone()[0]

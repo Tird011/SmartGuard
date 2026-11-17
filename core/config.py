@@ -44,6 +44,10 @@ WASH_DAY_WEEKDAY = 2               # datetime.weekday(): Mon=0 ... Wed=2
 # Student number as printed on the school IDs: 5 digits - 2 digits - 4 digits (e.g. 04141-24-0549).
 # Separators may be read by OCR as a space, dot, underscore or long dash, so those are accepted too.
 STUDENT_NUMBER_PATTERN = r"\b\d{5}[-–—_. ]\d{2}[-–—_. ]\d{4}\b"
+# --- Pending (unidentified) queue records ---
+# A flagged record nobody verified is deleted (with its snapshot) once it is this old.
+PENDING_EXPIRY_HOURS = 5
+PENDING_SWEEP_MINUTES = 10      # how often the app checks for expired pending records
 OCR_GPU = False
 # One frame read at least this confidently counts as two agreeing frames (see ScanVoter).
 OCR_ACCEPT_CONFIDENCE = 0.6

@@ -1,6 +1,7 @@
 """Record sheet export ('Save A Copy'): printable PDF or Excel from the audit database.
 
 The file respects whatever filter is on screen (search text and date range).
+Pending records (flagged, nobody identified yet) are never saved: only verified ones.
 """
 import os
 from datetime import datetime
@@ -83,9 +84,10 @@ def export(path: Optional[str] = None, search: str = "", date_from: str = "", da
     """Write the sheet (.pdf or .xlsx by extension) and return its path."""
     path = path or default_path()
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    rows = db_manager.fetch_report_rows(search, date_from, date_to, db_path)
+    rows = db_manager.fetch_report_rows(search, date_from, date_to, db_path, include_pending=False)
     if path.lower().endswith(".xlsx"):
         _excel(path, rows)
     else:
-        _pdf(path, rows, db_manager.fetch_summary(date_from, date_to, db_path), period, search.strip())
+        _pdf(path, rows, db_manager.fetch_summary(date_from, date_to, db_path, include_pending=False),
+             period, search.strip())
     return path

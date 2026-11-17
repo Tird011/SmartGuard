@@ -7,7 +7,7 @@ from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (QDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
                              QScrollArea, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget)
 
-from core import policy
+from core import config, policy
 from core.detector import Detector
 from core.engine import EVENT_PASS, CheckpointEngine
 from core.ocr_engine import DocumentOCR
@@ -82,6 +82,10 @@ class MainWindow(QMainWindow):
         self.worker.frame.connect(self._show_frame)
         self.worker.event.connect(self._on_event)
         self.worker.camera_state.connect(self._on_camera)
+        self.sweeper = QTimer(self)                 # expired pending records leave the queue and records
+        self.sweeper.timeout.connect(self._sweep_pending)
+        self.sweeper.start(config.PENDING_SWEEP_MINUTES * 60_000)
+        self._sweep_pending()
         self.refresh_queue()
         if start_camera:
             self.worker.start()
@@ -163,6 +167,19 @@ class MainWindow(QMainWindow):
             self.refresh_queue()
 
     # ----------------------------------------------------------------- queue
+    def _sweep_pending(self):
+        try:
+            removed = db.purge_expired_pending()
+        except Exception:
+            log.exception("Could not remove expired pending records")
+            return
+        if removed:
+            self._flash(f"Removed {removed} unverified alert(s) older than "
+                        f"{config.PENDING_EXPIRY_HOURS:g} hours.")
+            self.refresh_queue()
+            if self.stack.currentIndex() == 1:
+                self.audit.refresh()
+
     def refresh_queue(self):
         while self.queue_box.count():
             self.queue_box.takeAt(0).widget().deleteLater()
