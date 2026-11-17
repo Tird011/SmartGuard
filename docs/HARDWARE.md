@@ -1,62 +1,81 @@
-# SmartGuard-Vision: gate hardware (V3 bench build)
+# SmartGuard-Vision: gate hardware (V3 bench build, layout v2)
 
 Drawing: `docs/hardware_assembly.png`. Firmware: `firmware/smartguard_esp32/smartguard_esp32.ino` (v1.1.0).
+No soldering: breadboard, pre-cut jumper wires and component legs only.
 
 ## Parts
 
 | Have | Part |
 |---|---|
-| yes | ESP32 38-pin DevKit, USB-C (ESP32-WROOM-32) |
-| yes | 830-hole breadboard, MB102 power module (HW-131), SG90 servo, buzzer, jumper wire kit |
+| yes | ESP32 38-pin DevKit, USB-C, CP2102 USB chip (ESP32-WROOM-32) |
+| yes | 830-hole breadboard (rails split halfway), MB102 power module (HW-131), SG90 servo |
+| yes | active buzzer (sealed bottom, ⊕ mark, one longer leg), pre-cut jumper wire kit |
 | buy | 1 green LED and 1 red LED (5 mm) |
 | buy | 2 x 220 ohm resistors (bands red-red-brown) |
-| buy | 1 x 470 uF electrolytic capacitor, 10 V or higher (steadies the 5 V rail when the servo starts) |
+| buy | 1 x 470 uF electrolytic capacitor, 10 V or higher |
 | buy | 9 V 1 A DC adapter, 5.5 x 2.1 mm plug, centre positive (powers the MB102) |
+| nice to have | 10 male-to-male Dupont wires (easier servo connection) |
 | check | a USB-C cable that carries data (charge-only cables give no COM port) |
 
-## Pin map
+## Why the layout looks like this
 
-| ESP32 pin | Breadboard hole | Goes to |
+- The 38-pin ESP32 is too wide for one breadboard with both pin rows plugged in: no free holes would be left.
+  So **only one pin row (5V ... 3V3) goes into column E**, and the other row hangs off the left edge.
+  That is why the **left power rail is removed** first: otherwise the hanging pins would land in it and short together.
+- Every hole used is on the **right half** (columns E D C B A, row 1 at the top), whose printed numbers count from the top.
+- The pre-cut jumpers are rigid and lie flat, so each one runs in a straight line and never covers a hole that is used.
+- The rails are **split halfway** (gap in the red and blue lines near row 30): two short jumpers bridge them.
+- The buzzer legs are short and stiff (0.3 in apart), so both legs go in column E, three holes apart.
+- Rows 15 and 18 join each resistor to its LED. The ESP32 pins in those rows (G35 and SP/GPIO36) are input-only,
+  so the LED voltage there is harmless. Never use GPIO35 or GPIO36 for anything else.
+
+## Wiring list (right half; "- rail" = right blue rail, "+ rail" = right red rail)
+
+| What | From | To |
 |---|---|---|
-| G13 | A7 | servo signal (orange wire) |
-| GND | A8 | right - rail |
-| G27 | A11 | jumper to A40, 220 ohm D40-G40, red LED (long leg J40, short leg in left - rail) |
-| G26 | A12 | jumper to A32, 220 ohm D32-G32, green LED (long leg J32, short leg in left - rail) |
-| G25 | A13 | jumper to A25, buzzer + in E25, buzzer - in F25, jumper J25 to left - rail |
-| - | rails | servo red to right + rail, servo brown to right - rail, 470 uF across the right rails (stripe on -), jumper between left - and right - rails |
+| ESP32 pin row 5V ... 3V3 | | column E, rows 2 to 20 (5V in E2, 3V3 in E20); other row hangs free |
+| ESP32 GND | A7 | - rail (short jumper) |
+| Servo signal (orange) | servo plug | A6 (G13) |
+| Servo + (red) | servo plug | + rail, top half |
+| Servo - (brown) | servo plug | - rail, top half |
+| Green LED (G26) | 220 ohm D11 to D15 | LED long leg A15, short leg bent into the - rail |
+| Red LED (G33) | 220 ohm C13 to C18 | LED long leg A18, short leg bent into the - rail |
+| Buzzer (G25) | 2 in. jumper B12 to B32 | buzzer long leg (+) E32, short leg (-) E35; jumper A35 to - rail |
+| 470 uF capacitor | + leg in + rail, stripe leg in - rail | top half, near the servo |
+| Rail bridges | + rail above the gap to + rail below; same for the - rail | |
+| MB102 | bottom end, right pins in the right rail (+ on the red line) | right jumper 5V, left jumper removed |
 
-The ESP32 straddles the centre gap with its G13...G25 pin row in column B and its other pin row in column J.
-Column A is the only free hole next to each pin, so every ESP32 wire starts there.
-Row numbers count from the top end on both halves (the left half of this board is printed upside-down).
+Servo plug without soldering: push one bent end of a long jumper into each hole of the servo plug,
+the other end into the breadboard. (Male-to-male Dupont wires do this more neatly.)
 
 ## Rules
 
-1. The ESP32 is powered by USB only. Never connect a + rail to its 5V or 3V3 pin. It shares GND only.
-2. The servo is powered by the MB102 5 V rail, never by the ESP32 (a servo start can reset the ESP32: `reset=BROWNOUT`).
-3. Before plugging in the MB102, turn it so the + printed next to its pins sits on the red line. Set the right-side jumper to 5V.
-4. If a rail's red or blue line has a gap in the middle, the rail is split: bridge the two halves with a short jumper.
-5. Wire with the adapter unplugged and the USB cable out. Check, then power up.
-6. Use the DC jack on the MB102 as its input. Its regulator gets warm when the servo moves; that is normal for short moves.
+1. Nothing connects to the ESP32 5V (E2) or 3V3 (E20) rows. The ESP32 is powered by USB; it shares GND only.
+2. The servo is powered by the MB102, never by the ESP32 (a servo start can reset the ESP32: `reset=BROWNOUT`).
+3. Remove the MB102 left jumper: its left pins hang over the edge and must not carry power.
+4. Wire with the adapter unplugged and the USB cable out. Check, then power up.
+5. LED long leg = +. Capacitor stripe = -. Buzzer long leg / ⊕ side = +.
+6. If the ESP32 tilts because only one row is plugged in, prop the hanging side on something non-conductive (an eraser, folded paper).
 
 ## Build and test in stages
 
-### Stage 1: flash the bare board (nothing wired)
+### Stage 1: flash the bare board (nothing wired, not even on the breadboard)
 
 1. Arduino IDE 2: File > Preferences > Additional boards manager URLs:
    `https://espressif.github.io/arduino-esp32/package_esp32_index.json`
 2. Tools > Board > Boards Manager: install **esp32 by Espressif Systems**, version 3.x.
 3. Tools > Manage Libraries: install **ESP32Servo** by Kevin Harrington.
-4. Plug the ESP32 in. Windows Device Manager > Ports should show a COM port (for example "Silicon Labs CP210x" or "USB-SERIAL CH340").
-   No port: try another cable, or install the CP210x driver (Silicon Labs) or the CH340 driver (WCH).
+4. Plug the ESP32 in. Device Manager > Ports should show **Silicon Labs CP210x USB to UART Bridge (COMx)**.
+   No port: try another cable, or install the CP210x driver from Silicon Labs.
 5. Open `firmware/smartguard_esp32/smartguard_esp32.ino`. Tools > Board: **ESP32 Dev Module**. Tools > Port: that COM port. Upload.
    If it says `Failed to connect ... Wrong boot mode`, hold the **BOOT** button while it shows `Connecting....`, release when writing starts.
-6. Tools > Serial Monitor, 115200 baud, line ending **Newline**. Press **EN** on the board: you should see
+6. Tools > Serial Monitor, 115200 baud, line ending **Newline**. Press **RST/EN**: you should see
    `READY SMARTGUARD fw=1.1.0 reset=...`. Type `PING`: it answers `PONG`. Type `STATUS`.
 7. Close the Serial Monitor (only one program can use the port).
 
-### Stage 2: LEDs and buzzer (USB power only)
+### Stage 2: ESP32, LEDs and buzzer (USB power only, no MB102 yet)
 
-Wire the LEDs, resistors, buzzer, the A8 GND wire and the GND bridge. Then:
+Remove the left rail. Plug the ESP32 row into column E, add A7 to - rail, the resistors, LEDs, buzzer jumpers, and the rail bridges.
 
 ```powershell
 cd C:\Users\3rdre\SmartGuard
@@ -64,29 +83,24 @@ cd C:\Users\3rdre\SmartGuard
 python tools\hw_test.py
 ```
 
-Choose `1` (TEST): green LED, red LED, a beep. If the buzzer only clicks, it is a passive buzzer:
+Choose `1` (TEST): green LED, red LED, a beep. If the buzzer only clicks, it is passive after all:
 set `BUZZER_PASSIVE = true` in the firmware and upload again.
 
 ### Stage 3: servo and power module
 
-Unplug USB. Put the MB102 on the bottom end (right jumper on 5V), add the 470 uF capacitor and the servo wires.
-Plug in the 9 V adapter, press the MB102 button (its LED lights), plug USB back in, run `python tools\hw_test.py` and choose `1` again:
+Unplug USB. Put the MB102 on the bottom end (right jumper on 5V, left jumper removed), add the capacitor and the servo wires.
+Plug in the 9 V adapter, press the MB102 button (its LED lights), plug USB back in, run `python tools\hw_test.py`, choose `1`:
 the gate should open and close. If the arm moves the wrong way or too far, change `SERVO_CLOSED_DEG` / `SERVO_OPEN_DEG` and upload again.
 
 ### Stage 4: with the app
 
-Close `hw_test.py`. In a new terminal (so `SG_HARDWARE` is not still set to 0):
-
-```powershell
-python main.py
-```
-
-The status bar should say `Gate hardware: connected`. The app finds the board by itself (`SERIAL_PORT = "AUTO"` in `core/config.py`).
+Close `hw_test.py`. In a new terminal (so `SG_HARDWARE` is not still 0): `python main.py`.
+The status bar should say `Gate hardware: connected`. The app finds the board by itself (`SERIAL_PORT = "AUTO"`).
 To force a port: `$env:SG_SERIAL_PORT="COM5"` before `python main.py`.
-Unplug the USB cable while the app runs: the firmware closes the gate within 10 s, and the app reconnects when you plug it back.
 
 ## Firmware behaviour
 
+- Pins: servo GPIO13, buzzer GPIO25, green LED GPIO26, red LED GPIO33.
 - Gate closed and everything off at boot, on `SAFE`, and when the app has been silent for 10 s.
 - Non-blocking (millis timers); a task watchdog resets the chip if `loop()` ever hangs, and a reset closes the gate.
 - `READY ... reset=<reason>` tells you why the board last restarted (`BROWNOUT` = power problem, `TASK_WDT` = firmware hang).

@@ -31,14 +31,17 @@
  *   - Task watchdog on loop(): if the firmware ever hangs, the ESP32 resets within 5 s,
  *     and a reset closes the gate. The READY line then reports reset=TASK_WDT.
  *
- * Wiring: every signal uses ONE header row of the board (the row with 3V3 ... 5V),
- * so the board fits a single breadboard. See docs/hardware_assembly.png.
+ * Wiring: only ONE header row of the board is plugged in (the row with 5V ... 3V3, in breadboard
+ * column E); the other row hangs off the edge where the left power rail was removed.
+ * See docs/hardware_assembly.png.
  *   GPIO13 -> servo signal (orange)        servo power from the MB102 5 V rail, NOT the ESP32
  *   GPIO25 -> buzzer +                     (buzzer - to GND)
  *   GPIO26 -> 220 ohm -> green LED anode   (cathode to GND)
- *   GPIO27 -> 220 ohm -> red LED anode     (cathode to GND)
+ *   GPIO33 -> 220 ohm -> red LED anode     (cathode to GND)
  *   GND    -> breadboard GND rail (shared with the MB102 and the servo)
  * GPIO 0, 2, 5, 12, 15 are boot-strapping pins and GPIO14 pulses at boot: none are used.
+ * GPIO35 and GPIO36 (SP) are input-only; their breadboard rows are used as tie points between
+ * each resistor and its LED. Never use those two pins for anything else.
  */
 #include <Arduino.h>
 #include <ESP32Servo.h>
@@ -54,7 +57,7 @@
 constexpr uint8_t PIN_SERVO     = 13;
 constexpr uint8_t PIN_BUZZER    = 25;
 constexpr uint8_t PIN_LED_GREEN = 26;
-constexpr uint8_t PIN_LED_RED   = 27;
+constexpr uint8_t PIN_LED_RED   = 33;
 constexpr uint8_t PIN_STATUS    = 2;     // on-board LED on most DevKits: lit while the app is connected
 
 // Active buzzer (beeps on its own when powered) = false. Passive buzzer (only clicks) = true.
