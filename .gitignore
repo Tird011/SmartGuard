@@ -25,3 +25,6 @@ settings.json
 *.swp
 *.swo
 *.pt 
+
+#Reports
+.reports/
