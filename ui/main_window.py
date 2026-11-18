@@ -7,7 +7,7 @@ from PyQt5.QtGui import QColor, QFont, QImage, QPainter, QPixmap
 from PyQt5.QtWidgets import (QDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
                              QScrollArea, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget)
 
-from core import config, policy
+from core import camera, config, policy
 from core.detector import Detector
 from core.engine import EVENT_PASS, CheckpointEngine
 from core.ocr_engine import DocumentOCR
@@ -15,6 +15,7 @@ from core.verification import Verifier
 from database import db_manager as db
 from hardware.serial_handler import get_serial_handler
 from ui.audit_page import AuditPage
+from ui.camera_dialog import CameraDialog
 from ui.dialogs import ManualInputDialog, ScanDialog, VerifyDialog, button
 from ui.workers import VideoWorker
 
@@ -121,6 +122,7 @@ class MainWindow(QMainWindow):
         bar = QHBoxLayout()
         bar.addWidget(button("Check Records", "", self._show_audit))
         bar.addWidget(button("Manual Entry", "", self._manual_new))
+        bar.addWidget(button("Camera Settings", "", self._camera_settings))
         bar.addStretch()
         left = QVBoxLayout()
         left.addWidget(self.video, 1)
@@ -258,6 +260,19 @@ class MainWindow(QMainWindow):
         if dlg.exec_() == QDialog.Accepted:
             self._flash(self.verifier.manual(record_id, *dlg.values()).message)
             self.refresh_queue()
+
+    def _camera_settings(self):
+        dlg = CameraDialog(self.worker, self)
+        if dlg.exec_() != QDialog.Accepted or dlg.chosen is None:
+            return
+        try:
+            camera.save_camera_index(dlg.chosen)
+        except OSError:
+            log.exception("Could not save the camera choice")
+        if dlg.chosen != self.worker.camera_index:
+            self.video.setText(f"Switching to camera {dlg.chosen}...")
+            self.worker.switch_camera(dlg.chosen)
+        self._flash(f"Using camera {dlg.chosen} (saved for next time).")
 
     def _manual_new(self):
         dlg = ManualInputDialog(self)

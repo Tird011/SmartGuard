@@ -17,6 +17,7 @@ dist/
 logs/
 snapshots/
 .smartguard.db
+settings.json
 
 # IDE specific
 .vscode/

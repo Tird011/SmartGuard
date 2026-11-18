@@ -187,3 +187,23 @@ def test_scanning_pauses_detection_and_blurs_the_main_feed(app, window):
     window._set_scanning(False)
     assert not window.worker.paused and not window.scanning
     assert window.engine._locked                   # the student in view is not flagged again at once
+
+
+def test_camera_settings_lists_and_switches_camera(app, window, monkeypatch, tmp_path):
+    from core import camera
+    from ui.camera_dialog import CameraDialog
+    monkeypatch.setenv("SG_SETTINGS_PATH", str(tmp_path / "settings.json"))
+    monkeypatch.delenv("SG_CAMERA_INDEX", raising=False)
+    monkeypatch.setattr(config, "CAMERA_INDEX", 0)
+    cams = [camera.CameraInfo(0, "Integrated Webcam", 640, 480, in_use=True),
+            camera.CameraInfo(1, "USB Camera", 1280, 720, np.zeros((90, 160, 3), np.uint8))]
+    dlg = CameraDialog(window.worker, window, lister=lambda **kw: cams)
+    QTest.qWait(300)
+    assert dlg.list.count() == 2 and dlg.list.currentRow() == 0          # the camera in use is selected
+    dlg.list.setCurrentRow(1)
+    dlg._use()
+    assert dlg.chosen == 1
+    window.worker.switch_camera(dlg.chosen)
+    camera.save_camera_index(dlg.chosen)
+    assert window.worker.camera_index == 1 and window.worker._reopen
+    assert camera.saved_camera_index() == 1

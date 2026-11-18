@@ -34,11 +34,19 @@ class VideoWorker(QThread):
         self.engine = engine
         self.latest_raw = None      # newest un-annotated frame (the scan dialog reads this)
         self.paused = False         # True while an ID/COR is scanned: no detection, no flags
+        self.camera_index = config.CAMERA_INDEX
+        self._reopen = False        # set by switch_camera(): close this camera, open the new one
         self._running = True
 
+    def switch_camera(self, index: int) -> None:
+        """Change camera while running (Camera Settings). Takes effect within a frame."""
+        self.camera_index = int(index)
+        self.latest_raw = None
+        self._reopen = True
+
     def _open(self):
-        cap = cv2.VideoCapture(config.CAMERA_INDEX, cv2.CAP_DSHOW) if sys.platform == "win32" \
-            else cv2.VideoCapture(config.CAMERA_INDEX)
+        cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW) if sys.platform == "win32" \
+            else cv2.VideoCapture(self.camera_index)
         cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))   # USB cams only do 1080p30 in MJPG
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
@@ -47,20 +55,22 @@ class VideoWorker(QThread):
 
     def _pause(self, seconds: float) -> None:
         end = time.monotonic() + seconds
-        while self._running and time.monotonic() < end:
+        while self._running and not self._reopen and time.monotonic() < end:
             self.msleep(100)
 
     def run(self):
         while self._running:
+            self._reopen = False
             cap = self._open()
             if not cap.isOpened():
                 cap.release()
-                self.camera_state.emit(False, f"Cannot open camera {config.CAMERA_INDEX}. Retrying...")
+                self.camera_state.emit(False, f"Cannot open camera {self.camera_index}. Retrying... "
+                                              "(pick another one in Camera Settings)")
                 self._pause(2.0)
                 continue
-            self.camera_state.emit(True, "Camera ready")
+            self.camera_state.emit(True, f"Camera {self.camera_index} ready")
             last_emit = 0.0
-            while self._running:
+            while self._running and not self._reopen:
                 ok, raw = cap.read()
                 if not ok:
                     break
@@ -78,6 +88,8 @@ class VideoWorker(QThread):
                 if result and result.event:
                     self.event.emit(result)
             cap.release()
+            if self._reopen:
+                continue
             if self._running:
                 self.camera_state.emit(False, "Camera disconnected. Reconnecting...")
                 self._pause(2.0)

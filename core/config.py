@@ -27,7 +27,19 @@ PASS_COOLDOWN_SEC = 6              # don't re-open the gate for the same person 
 VIOLATION_COOLDOWN_SEC = 10        # don't queue duplicate cards for the same person
 
 # --- Camera Settings ---
-CAMERA_INDEX = int(os.getenv("SG_CAMERA_INDEX", "0"))
+# Which camera: pick it in the app (Camera Settings) - saved in settings.json.
+# SG_CAMERA_INDEX still overrides it.
+def _saved_camera_index() -> int:
+    import json
+    try:
+        with open(os.getenv("SG_SETTINGS_PATH", os.path.join(BASE_DIR, "settings.json")),
+                  encoding="utf-8") as f:
+            return int(json.load(f).get("camera_index", 0))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return 0
+
+
+CAMERA_INDEX = int(os.getenv("SG_CAMERA_INDEX", "") or _saved_camera_index())
 FRAME_WIDTH = 1920
 FRAME_HEIGHT = 1080
 

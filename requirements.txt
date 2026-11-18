@@ -6,4 +6,5 @@ easyocr>=1.7
 pyserial>=3.5
 reportlab>=4.0
 openpyxl>=3.1
+pygrabber>=0.2; sys_platform == "win32"   # camera names in Camera Settings (optional)
 # tests: pip install pytest
